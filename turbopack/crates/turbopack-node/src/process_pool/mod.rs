@@ -26,7 +26,7 @@ use tokio::{
     time::{sleep, timeout},
 };
 use turbo_rcstr::{RcStr, rcstr};
-use turbo_tasks::{FxIndexSet, ResolvedVc, Vc, duration_span};
+use turbo_tasks::{FxIndexSet, ResolvedVc, Vc, duration_span, try_turbo_tasks};
 use turbo_tasks_fs::FileSystemPath;
 use turbopack_ecmascript::magic_identifier::unmangle_identifiers;
 
@@ -164,6 +164,11 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> OutputStreamHandler<R, W> {
                 let text = unmangle_identifiers(text, |content| {
                     format!("{{{content}}}").italic().to_string()
                 });
+                // A pre-warmed process boots from a plain `tokio::spawn`, outside turbo-tasks,
+                // and source mapping reads turbo-tasks values.
+                if try_turbo_tasks().is_none() {
+                    return write_final(text.as_bytes(), final_stream).await;
+                }
                 match apply_source_mapping(
                     text.as_ref(),
                     assets_for_source_mapping,
